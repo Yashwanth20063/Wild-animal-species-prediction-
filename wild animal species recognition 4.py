@@ -8,14 +8,15 @@ import matplotlib.pyplot as plt
 import tkinter as tk
 from tkinter import filedialog, Label, Button, Canvas, Scrollbar, Frame
 from PIL import Image, ImageTk
+import winsound
 
-# Download WordNet datas
+# Download WordNet dataset
 nltk.download('wordnet')
 nltk.download('omw-1.4')  # Optional: For additional languages
 
 # Load Pre-Trained Model
 print("Loading pre-trained MobileNetV2 model...")
-model = MobileNetV2(weights="imagenet")
+model = MobileNetV2(weights="imagenet") 
 print("Model loaded successfully!")
 
 # Function to check if the label is an animal
@@ -36,33 +37,11 @@ def predict_species(image):
     filtered_predictions = [pred for pred in decoded_predictions if is_animal(pred[1])]
     return filtered_predictions
 
-# Function to upload multiple images and detect animals
-def upload_images():
-    file_paths = filedialog.askopenfilenames(filetypes=[("Image Files", "*.jpg *.jpeg *.png")])
-    if not file_paths:
-        return
-    
-    for widget in image_frame.winfo_children():
-        widget.destroy()
-    
-    for file_path in file_paths:
-        image = cv2.imread(file_path)
-        image_rgb = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
-        predictions = predict_species(image)
-        if predictions:
-            label, confidence = predictions[0][1], predictions[0][2] * 100
-            result_text = f"Detected: {label} ({confidence:.2f}%)"
-        else:
-            result_text = "No animal detected"
-        
-        display_image(file_path, result_text)
-        plot_graphs(predictions)
-
 # Function to open live camera
 def open_camera():
     cap = cv2.VideoCapture(0)
     if not cap.isOpened():
-        result_label.config(text="Error: Could not access the webcam.", fg="red")
+        print("Error: Could not access the webcam.")
         return
     while True:
         ret, frame = cap.read()
@@ -73,26 +52,16 @@ def open_camera():
             label, confidence = predictions[0][1], predictions[0][2] * 100
             cv2.putText(frame, f"{label} ({confidence:.2f}%)", (10, 30),
                         cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 255, 0), 2)
+            winsound.Beep(1000, 500)  # Alert sound when an animal is detected
         cv2.imshow("Animal Species Detector", frame)
         if cv2.waitKey(1) & 0xFF == ord('q'):
             break
     cap.release()
     cv2.destroyAllWindows()
 
-# Function to display images on UI
-def display_image(file_path, result_text):
-    frame = tk.Frame(image_frame, bg="black")
-    frame.pack(pady=5)
-    
-    image = Image.open(file_path)
-    image = image.resize((200, 200))
-    photo = ImageTk.PhotoImage(image)
-    img_label = Label(frame, image=photo, bg="black")
-    img_label.image = photo
-    img_label.pack()
-    
-    text_label = Label(frame, text=result_text, font=("Arial", 12), fg="white", bg="black")
-    text_label.pack()
+# Function to enable mouse scroll
+def on_mouse_wheel(event):
+    canvas.yview_scroll(-1 * (event.delta // 120), "units")
 
 # Function to plot graphs
 def plot_graphs(predictions):
@@ -129,38 +98,92 @@ def plot_graphs(predictions):
     plt.legend()
     plt.show()
 
+# Function to exit the application
+def exit_application():
+    root.destroy()
+
+def display_image(file_path, result_text):
+    img = Image.open(file_path)
+    img = img.resize((200, 200))  # Resize image for display
+    img = ImageTk.PhotoImage(img)
+
+    img_label = Label(image_frame, image=img, text=result_text, compound="top", fg="white", bg="#2c3e50", font=("Arial", 12))
+    img_label.image = img  # Keep reference to avoid garbage collection
+    img_label.pack(pady=10)
+
+# Function to upload multiple images and detect animals
+def upload_images():
+    file_paths = filedialog.askopenfilenames(filetypes=[("Image Files", "*.jpg *.jpeg *.png")])
+    if not file_paths:
+        return
+    
+    for widget in image_frame.winfo_children():
+        widget.destroy()
+    
+    for file_path in file_paths:
+        image = cv2.imread(file_path)
+        image_rgb = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
+        predictions = predict_species(image)
+        detected_animals = []
+        
+        for pred in predictions:
+            label, confidence = pred[1], pred[2] * 100
+            detected_animals.append(f"{label} ({confidence:.2f}%)")
+        
+        result_text = "Detected: " + ", ".join(detected_animals) if detected_animals else "No animal detected"
+        display_image(file_path, result_text)
+        plot_graphs(predictions)
+
 # Initialize Tkinter Window
 root = tk.Tk()
 root.title("Animal Detection System")
-root.geometry("800x600")
-root.configure(bg="black")
+root.geometry("900x650")
+root.configure(bg="#2c3e50")
 
-# Create a canvas for scrolling
-canvas = Canvas(root, bg="black")
-scroll_y = Scrollbar(root, orient="vertical", command=canvas.yview)
-frame = Frame(canvas, bg="black")
-canvas.create_window((0, 0), window=frame, anchor="nw")
-canvas.configure(yscrollcommand=scroll_y.set)
-
-# Upload Button
-upload_btn = Button(root, text="Upload Images", command=upload_images, font=("Arial", 14), bg="gray", fg="white")
+# Buttons
+upload_btn = Button(root, text="Upload Images", command=upload_images, font=("Arial", 14), bg="#2980b9", fg="white")
 upload_btn.pack(pady=10)
 
-# Live Camera Button
-camera_btn = Button(root, text="Open Camera", command=open_camera, font=("Arial", 14), bg="gray", fg="white")
+camera_btn = Button(root, text="Open Camera", command=open_camera, font=("Arial", 14), bg="#2980b9", fg="white")
 camera_btn.pack(pady=10)
 
-# Frame for displaying images
-image_frame = Frame(frame, bg="black")
-image_frame.pack()
+exit_btn = Button(root, text="Exit", command=exit_application, font=("Arial", 14), bg="#c0392b", fg="white")
+exit_btn.pack(pady=10)
 
-# Result Label
-result_label = Label(root, text="", font=("Arial", 16), fg="white", bg="black")
-result_label.pack(pady=10)
+# Create a scrollable frame
+frame_container = Frame(root)
+frame_container.pack(fill="both", expand=True)
+
+canvas = Canvas(frame_container, bg="#2c3e50")
+scrollbar = Scrollbar(frame_container, orient="vertical", command=canvas.yview)
+scrollable_frame = Frame(canvas, bg="#2c3e50")
+
+scrollable_frame.bind("<Configure>", lambda e: canvas.configure(scrollregion=canvas.bbox("all")))
+canvas.create_window((0, 0), window=scrollable_frame, anchor="nw")
+canvas.configure(yscrollcommand=scrollbar.set)
 
 canvas.pack(side="left", fill="both", expand=True)
-scroll_y.pack(side="right", fill="y")
-frame.bind("<Configure>", lambda e: canvas.configure(scrollregion=canvas.bbox("all")))
+scrollbar.pack(side="right", fill="y")
+
+canvas.bind_all("<MouseWheel>", on_mouse_wheel)  # Enable scrolling with mouse wheel
+
+# Frame for displaying images
+image_frame = Frame(scrollable_frame, bg="#2c3e50")
+image_frame.pack()
+
+# Frame for displaying images
+image_frame = Frame(scrollable_frame, bg="#2c3e50")
+image_frame.pack()
+
+footer_label = Label(
+    root,
+    text="College: Govt Polytechnic M.H Halli\nDepartment: Computer Science and Engineering\nCreators: JAYANTH H P (189CS22021), YASHVANTH B D (189CS22056), MADAN H C (189CS23303)",
+    font=("Arial", 8),
+    fg="white",
+    bg="#1e1e1e"
+)
+footer_label.pack(side="bottom", fill="x", pady=10)
+footer_label.config(anchor="center")
 
 # Run the GUI
 root.mainloop()
